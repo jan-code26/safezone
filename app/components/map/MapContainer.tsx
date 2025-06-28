@@ -4,11 +4,9 @@
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import "leaflet/dist/leaflet.css"
-import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css"
-import "leaflet-defaulticon-compatibility"
 
-// 🔑 KEY FIX: Import Leaflet properly to avoid UMD global error
-import * as L from "leaflet"
+// Import our custom Leaflet configuration
+import L from "../../../lib/leaflet-config"
 
 const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false })
 
@@ -18,24 +16,15 @@ const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), 
 
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false })
 
-// ✅ Now this function works because L is properly imported
-const setupLeafletIcons = () => {
-  if (typeof window !== "undefined") {
-    delete (L.Icon.Default.prototype as any)._getIconUrl
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: "/leaflet/marker-icon-2x.png",
-      iconUrl: "/leaflet/marker-icon.png",
-      shadowUrl: "/leaflet/marker-shadow.png",
-    })
-  }
-}
+// Custom Leaflet configuration is already loaded via import
+// No need for manual icon setup since it's handled in lib/leaflet-config.ts
 
 export default function Map() {
   const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
     setIsClient(true)
-    setupLeafletIcons()
+    // Icons are automatically configured via lib/leaflet-config.ts import
   }, [])
 
   if (!isClient) {
