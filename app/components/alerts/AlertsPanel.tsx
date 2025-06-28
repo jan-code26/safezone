@@ -1,62 +1,59 @@
 // app/components/alerts/AlertsPanel.tsx
-'use client';
+"use client"
 
-import { useState } from 'react';
+import { useState } from "react"
 
 interface Alert {
-  id: string;
-  type: 'weather' | 'emergency' | 'info';
-  message: string;
-  timestamp: Date;
+  id: string
+  type: "severe" | "watch" | "warning"
+  title: string
+  message: string
+  timestamp: Date
 }
 
 export default function AlertsPanel() {
   const [alerts] = useState<Alert[]>([
     {
-      id: '1',
-      type: 'weather',
-      message: 'Severe thunderstorm warning in effect',
-      timestamp: new Date()
+      id: "1",
+      type: "severe",
+      title: "Severe Thunderstorm Warning",
+      message: "Severe thunderstorm with damaging winds and heavy rain. Seek shelter immediately.",
+      timestamp: new Date(),
     },
     {
-      id: '2',
-      type: 'emergency',
-      message: 'Emergency services deployed to downtown area',
-      timestamp: new Date(Date.now() - 30 * 60 * 1000)
-    }
-  ]);
+      id: "2",
+      type: "watch",
+      title: "Flash Flood Watch",
+      message: "Heavy rainfall may cause rapid flooding in low-lying areas.",
+      timestamp: new Date(Date.now() - 30 * 60 * 1000),
+    },
+  ])
 
-  const getAlertIcon = (type: Alert['type']) => {
+  const getAlertStyle = (type: Alert["type"]) => {
     switch (type) {
-      case 'weather': return '🌩️';
-      case 'emergency': return '🚨';
-      case 'info': return 'ℹ️';
+      case "severe":
+        return "border-l-red-500 bg-red-50"
+      case "watch":
+        return "border-l-orange-500 bg-orange-50"
+      case "warning":
+        return "border-l-yellow-500 bg-yellow-50"
     }
-  };
+  }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-gray-900 border-b pb-2">
-        Active Alerts
-      </h2>
-      
-      <div className="space-y-3">
+    <div className="h-full flex flex-col">
+      <div className="p-4 border-b">
+        <h2 className="font-semibold text-gray-900">Weather Alerts</h2>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {alerts.map((alert) => (
-          <div key={alert.id} className="p-3 border-l-4 border-red-500 bg-red-50 rounded">
-            <div className="flex items-start gap-3">
-              <span className="text-lg">{getAlertIcon(alert.type)}</span>
-              <div className="flex-1">
-                <div className="text-sm font-medium text-red-800">
-                  {alert.message}
-                </div>
-                <div className="text-xs text-red-600 mt-1">
-                  {alert.timestamp.toLocaleTimeString()}
-                </div>
-              </div>
-            </div>
+          <div key={alert.id} className={`p-3 border-l-4 rounded ${getAlertStyle(alert.type)}`}>
+            <div className="font-semibold text-sm text-gray-900 mb-1">{alert.title}</div>
+            <div className="text-xs text-gray-700 leading-relaxed">{alert.message}</div>
           </div>
         ))}
       </div>
     </div>
-  );
+  )
 }
