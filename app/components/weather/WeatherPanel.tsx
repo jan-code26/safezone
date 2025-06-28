@@ -4,11 +4,29 @@
 import { useState, useEffect } from 'react';
 
 interface WeatherData {
-  temperature: number;
-  description: string;
-  humidity: number;
-  windSpeed: number;
-  location: string;
+  location: {
+    lat: number;
+    lng: number;
+    name?: string;
+  };
+  current: {
+    temperature: number;
+    condition: string;
+    description: string;
+    humidity: number;
+    windSpeed: number;
+    pressure?: number;
+    visibility?: number;
+    icon?: string;
+  };
+  forecast: Array<{
+    time: string;
+    temp: number;
+    condition: string;
+    description: string;
+    icon?: string;
+  }>;
+  alerts: Array<any>;
 }
 
 export default function WeatherPanel() {
@@ -19,12 +37,26 @@ export default function WeatherPanel() {
   useEffect(() => {
     async function fetchWeather() {
       try {
-        // Replace with your weather API endpoint
-        const response = await fetch('/api/weather');
+        // Get user location first (you might want to pass lat/lng as props instead)
+        if (!navigator.geolocation) {
+          throw new Error('Geolocation is not supported');
+        }
+        
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        
+        const { latitude, longitude } = position.coords;
+        const response = await fetch(`/api/weather?lat=${latitude}&lng=${longitude}`);
+        
         if (!response.ok) throw new Error('Failed to fetch weather');
         
-        const data = await response.json();
-        setWeatherData(data);
+        const result = await response.json();
+        if (result.success) {
+          setWeatherData(result.data);
+        } else {
+          throw new Error(result.error);
+        }
       } catch (err) {
         setError('Failed to load weather data');
       } finally {
@@ -63,22 +95,54 @@ export default function WeatherPanel() {
         <div className="space-y-3">
           <div className="bg-blue-50 p-3 rounded-lg">
             <div className="text-2xl font-bold text-blue-800">
-              {weatherData.temperature}°C
+              {weatherData.current.temperature}°C
             </div>
-            <div className="text-blue-600">{weatherData.description}</div>
-            <div className="text-sm text-blue-500">{weatherData.location}</div>
+            <div className="text-blue-600 capitalize">{weatherData.current.description}</div>
+            <div className="text-sm text-blue-500">
+              {weatherData.location.name || `${weatherData.location.lat.toFixed(2)}, ${weatherData.location.lng.toFixed(2)}`}
+            </div>
           </div>
           
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="bg-gray-50 p-2 rounded">
               <div className="text-gray-600">Humidity</div>
-              <div className="font-semibold">{weatherData.humidity}%</div>
+              <div className="font-semibold">{weatherData.current.humidity}%</div>
             </div>
             <div className="bg-gray-50 p-2 rounded">
               <div className="text-gray-600">Wind</div>
-              <div className="font-semibold">{weatherData.windSpeed} m/s</div>
+              <div className="font-semibold">{weatherData.current.windSpeed} km/h</div>
             </div>
           </div>
+          
+          {weatherData.current.pressure && (
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="bg-gray-50 p-2 rounded">
+                <div className="text-gray-600">Pressure</div>
+                <div className="font-semibold">{weatherData.current.pressure} hPa</div>
+              </div>
+              {weatherData.current.visibility && (
+                <div className="bg-gray-50 p-2 rounded">
+                  <div className="text-gray-600">Visibility</div>
+                  <div className="font-semibold">{weatherData.current.visibility} km</div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {weatherData.forecast && weatherData.forecast.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-sm font-semibold mb-2">Forecast</h3>
+              <div className="space-y-1">
+                {weatherData.forecast.slice(0, 3).map((item, index) => (
+                  <div key={index} className="flex justify-between items-center text-sm bg-gray-50 p-2 rounded">
+                    <span>{item.time}</span>
+                    <span className="capitalize">{item.condition}</span>
+                    <span className="font-semibold">{item.temp}°C</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
