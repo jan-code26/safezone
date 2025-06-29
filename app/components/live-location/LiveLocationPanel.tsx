@@ -127,7 +127,7 @@ export default function LiveLocationPanel({ className = '' }: LiveLocationPanelP
       </div>
 
       {/* Location Permission Status */}
-      {locationPermissionStatus !== 'granted' && (
+      {locationPermissionStatus !== 'granted' && !locationError && (
         <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center">
             <svg className="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,21 +140,39 @@ export default function LiveLocationPanel({ className = '' }: LiveLocationPanelP
           </div>
           <button
             onClick={requestLocationPermission}
-            className="mt-2 px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700"
+            disabled={isLoading}
+            className="mt-2 px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 disabled:opacity-50"
           >
-            Grant Permission
+            {isLoading ? 'Requesting...' : 'Grant Permission'}
           </button>
         </div>
       )}
 
       {/* Error Display */}
       {locationError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm text-red-800">{locationError}</p>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-800 mb-1">Location Access Info</p>
+              <p className="text-sm text-blue-700">{locationError}</p>
+              {locationError.includes('desktop computers') && (
+                <p className="text-xs text-blue-600 mt-2">
+                  💡 Tip: This feature works best on mobile devices with GPS. On desktop, you can still view others' live locations.
+                </p>
+              )}
+              {!locationError.includes('desktop computers') && (
+                <button
+                  onClick={requestLocationPermission}
+                  disabled={isLoading}
+                  className="mt-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isLoading ? 'Trying...' : 'Try Again'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -207,8 +225,40 @@ export default function LiveLocationPanel({ className = '' }: LiveLocationPanelP
           </div>
         )}
 
-        {!currentLocation && locationPermissionStatus === 'granted' && (
-          <p className="text-sm text-gray-500">Getting your location...</p>
+        {!currentLocation && locationPermissionStatus === 'granted' && !locationError && (
+          <div className="flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <p className="text-sm text-gray-500">Getting your location...</p>
+          </div>
+        )}
+
+        {!currentLocation && locationPermissionStatus === null && !locationError && (
+          <div className="flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <p className="text-sm text-gray-500">Checking location permissions...</p>
+          </div>
+        )}
+
+        {!currentLocation && locationError && locationError.includes('desktop computers') && (
+          <div className="mt-3 p-3 bg-gray-100 rounded border-l-4 border-blue-500">
+            <p className="text-sm text-gray-700 mb-2">
+              <strong>Demo Mode:</strong> Since location isn't available, here's what your location data would look like:
+            </p>
+            <div className="space-y-1 text-xs text-gray-600">
+              <div className="flex justify-between">
+                <span>Coordinates:</span>
+                <span className="font-mono">40.758896, -73.985130</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Accuracy:</span>
+                <span className="text-blue-600">High (±15m)</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Location:</span>
+                <span>Times Square, NYC</span>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

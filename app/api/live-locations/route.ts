@@ -59,10 +59,13 @@ export async function GET(request: Request) {
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" }, 
-        { status: 401 }
-      );
+      // Return empty data instead of error when not authenticated
+      return NextResponse.json({ 
+        success: true, 
+        data: [],
+        count: 0,
+        message: "No authentication - returning empty data"
+      });
     }
 
     const { searchParams } = new URL(request.url);

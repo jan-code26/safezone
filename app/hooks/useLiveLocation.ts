@@ -99,29 +99,42 @@ export function useLiveLocation(options: LocationOptions = {}): UseLiveLocationR
         return;
       }
 
+      // Check if we're on desktop and provide helpful message
+      const isDesktop = !('ontouchstart' in window) && !navigator.userAgent.match(/Mobile|Android|iPhone|iPad/);
+      
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setCurrentLocation(position);
           setLocationError(null);
+          setLocationPermissionStatus('granted');
           resolve(true);
         },
         (error) => {
           let errorMessage = 'Failed to get location';
           switch (error.code) {
             case error.PERMISSION_DENIED:
-              errorMessage = 'Location access denied by user';
+              errorMessage = 'Location access denied by user. Please allow location access in your browser settings.';
+              setLocationPermissionStatus('denied');
               break;
             case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location information unavailable';
+              if (isDesktop) {
+                errorMessage = 'Location services work best on mobile devices with GPS. On desktop computers, location accuracy may be limited or unavailable. You can still view others\' live locations.';
+              } else {
+                errorMessage = 'Location information unavailable. Please check your device\'s location settings.';
+              }
+              setLocationPermissionStatus('denied');
               break;
             case error.TIMEOUT:
-              errorMessage = 'Location request timed out';
+              errorMessage = 'Location request timed out. Please try again or check your internet connection.';
               break;
           }
           setLocationError(errorMessage);
           resolve(false);
         },
-        locationOptions
+        {
+          ...locationOptions,
+          timeout: 15000, // Increase timeout for better reliability
+        }
       );
     });
   }, [locationOptions]);
@@ -130,9 +143,13 @@ export function useLiveLocation(options: LocationOptions = {}): UseLiveLocationR
   const getCurrentLocation = useCallback((): Promise<GeolocationPosition> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation not supported'));
+        const error = new Error('Geolocation not supported');
+        setLocationError('Geolocation is not supported by this browser');
+        reject(error);
         return;
       }
+
+      const isDesktop = !('ontouchstart' in window) && !navigator.userAgent.match(/Mobile|Android|iPhone|iPad/);
 
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -144,19 +161,27 @@ export function useLiveLocation(options: LocationOptions = {}): UseLiveLocationR
           let errorMessage = 'Failed to get location';
           switch (error.code) {
             case error.PERMISSION_DENIED:
-              errorMessage = 'Location access denied';
+              errorMessage = 'Location access denied. Please allow location access in your browser settings.';
+              setLocationPermissionStatus('denied');
               break;
             case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location unavailable';
+              if (isDesktop) {
+                errorMessage = 'Location services work best on mobile devices with GPS. On desktop computers, location accuracy may be limited or unavailable.';
+              } else {
+                errorMessage = 'Location information unavailable. Please check your device\'s location settings and ensure you have a good internet connection.';
+              }
               break;
             case error.TIMEOUT:
-              errorMessage = 'Location request timed out';
+              errorMessage = 'Location request timed out. Please try again or check your internet connection.';
               break;
           }
           setLocationError(errorMessage);
           reject(new Error(errorMessage));
         },
-        locationOptions
+        {
+          ...locationOptions,
+          timeout: 15000, // Increase timeout
+        }
       );
     });
   }, [locationOptions]);
@@ -364,7 +389,20 @@ export function useLiveLocation(options: LocationOptions = {}): UseLiveLocationR
   useEffect(() => {
     checkLocationPermission();
     refreshLocations();
-  }, [checkLocationPermission, refreshLocations]);
+    
+    // Try to get initial location if permission is already granted
+    const tryInitialLocation = async () => {
+      if (locationPermissionStatus === 'granted') {
+        try {
+          await getCurrentLocation();
+        } catch (error) {
+          console.log('Initial location fetch failed:', error);
+        }
+      }
+    };
+    
+    tryInitialLocation();
+  }, [checkLocationPermission, refreshLocations, getCurrentLocation, locationPermissionStatus]);
 
   // Cleanup on unmount
   useEffect(() => {
