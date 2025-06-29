@@ -353,7 +353,7 @@ export default function Map() {
             // then a specific warning for wind could be added. For now, this is fine.
             null
           )}
-        </LayersControl>
+        </LayersControlComp>
 
         {/* Render contact markers from MapContext with custom icons */}
         {markers &&
