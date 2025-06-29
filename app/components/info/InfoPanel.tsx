@@ -9,29 +9,35 @@ interface WeatherData {
   current: {
     temperature: number
     condition: string
+    description?: string; // Added
     windSpeed: number
     humidity: number
     pressure?: number
     visibility?: number
+    icon?: string; // Added
   }
-  alerts: Array<{
-    id: number
-    type: string
-    title: string
-    description: string
-    severity: string
-    areas: string[]
-    expires: string
+  alerts: Array<{ // These are weather-specific alerts, part of WeatherData
+    id: string | number; // Changed to string | number for consistency
+    type: string;
+    title: string;
+    description: string;
+    severity: string; // Can be more specific e.g. 'low' | 'medium' | 'high' | 'warning'
+    areas: string[]; // Or some geo structure
+    expires: string; // ISO string
+    source?: string; // Added for consistency
   }>
   forecast: Array<{
     time: string
     temp: number
     condition: string
+    description?: string; // Added
+    icon?: string; // Added
   }>
 }
 
+// This is the main Alert interface for app-wide alerts, distinct from WeatherData.alerts
 interface Alert {
-  id: number
+  id: string | number; // Changed to string | number
   type: string
   severity: 'low' | 'medium' | 'high'
   title: string
