@@ -42,7 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session) {
           setSession(session)
           setUser(session.user)
-          await loadUserProfile(session.user.id)
+          // Don't wait for profile loading to complete initialization
+          loadUserProfile(session.user.id).catch(error => {
+            console.error("Error loading profile during init:", error)
+          })
         }
       } catch (error) {
         console.error("Error initializing auth:", error)

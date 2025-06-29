@@ -334,24 +334,55 @@ export function useLiveLocation(options: LocationOptions = {}): UseLiveLocationR
     }
   }, []);
 
-  // Fetch live locations from other users
-  const refreshLocations = useCallback(async () => {
+  // Fetch live locations from other users - using ref to avoid dependency issues
+  const refreshLocationsRef = useRef<(() => Promise<void>) | null>(null);
+  
+  const refreshLocationsFunction = async () => {
     try {
       const response = await fetch('/api/live-locations?include_own=false');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       
       if (data.success) {
         setLiveLocations(data.data || []);
       } else {
         console.error('Failed to fetch live locations:', data.error);
+        setLiveLocations([]); // Set empty array on error
       }
     } catch (error) {
       console.error('Failed to refresh locations:', error);
+      setLiveLocations([]); // Set empty array on network error
+      // Don't set location error here as this is for other users' locations
+    }
+  };
+  
+  refreshLocationsRef.current = refreshLocationsFunction;
+
+  const refreshLocations = useCallback(async () => {
+    if (refreshLocationsRef.current) {
+      await refreshLocationsRef.current();
     }
   }, []);
 
-  // Set up real-time subscription
+  // Set up real-time subscription with throttling
   useEffect(() => {
+    let refreshTimeout: NodeJS.Timeout | null = null;
+    
+    const throttledRefresh = () => {
+      if (refreshTimeout) return; // Already scheduled
+      
+      refreshTimeout = setTimeout(() => {
+        if (refreshLocationsRef.current) {
+          refreshLocationsRef.current();
+        }
+        refreshTimeout = null;
+      }, 5000); // Throttle to max once every 5 seconds
+    };
+
     const setupRealtimeSubscription = async () => {
       try {
         // Subscribe to live_locations table changes
@@ -366,8 +397,8 @@ export function useLiveLocation(options: LocationOptions = {}): UseLiveLocationR
             },
             (payload) => {
               console.log('Live location change:', payload);
-              // Refresh locations when there are changes
-              refreshLocations();
+              // Throttled refresh to prevent too many API calls
+              throttledRefresh();
             }
           )
           .subscribe();
@@ -379,30 +410,41 @@ export function useLiveLocation(options: LocationOptions = {}): UseLiveLocationR
     setupRealtimeSubscription();
 
     return () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
       if (realtimeChannelRef.current) {
         supabase.removeChannel(realtimeChannelRef.current);
       }
     };
-  }, [refreshLocations]);
+  }, []); // Remove all dependencies
 
   // Initial setup
   useEffect(() => {
-    checkLocationPermission();
-    refreshLocations();
-    
-    // Try to get initial location if permission is already granted
-    const tryInitialLocation = async () => {
-      if (locationPermissionStatus === 'granted') {
-        try {
-          await getCurrentLocation();
-        } catch (error) {
-          console.log('Initial location fetch failed:', error);
-        }
+    const initializeLocation = async () => {
+      await checkLocationPermission();
+      
+      // Only try to refresh locations if we're in a browser environment
+      if (typeof window !== 'undefined' && refreshLocationsRef.current) {
+        refreshLocationsRef.current();
       }
     };
     
-    tryInitialLocation();
-  }, [checkLocationPermission, refreshLocations, getCurrentLocation, locationPermissionStatus]);
+    initializeLocation();
+  }, []); // Remove all dependencies to prevent re-running
+
+  // Set up periodic refresh for live locations (every 30 seconds)
+  useEffect(() => {
+    const refreshInterval = setInterval(() => {
+      if (typeof window !== 'undefined' && refreshLocationsRef.current) {
+        refreshLocationsRef.current();
+      }
+    }, 30000); // Refresh every 30 seconds
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, []); // Remove refreshLocations dependency to prevent recreation
 
   // Cleanup on unmount
   useEffect(() => {
