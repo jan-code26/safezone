@@ -13,12 +13,29 @@ import "leaflet/dist/leaflet.css"
 // Import our custom Leaflet configuration with custom icons
 import { createStatusIcon } from "../../../lib/leaflet-config"
 
-const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false })
-const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false })
-const LayersControl = dynamic(() => import("react-leaflet").then((mod) => mod.LayersControl), { ssr: false })
-const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false })
-const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false })
-const Circle = dynamic(() => import("react-leaflet").then((mod) => mod.Circle), { ssr: false })
+// Import L from leaflet for type usage if needed for the LayersControl cast
+import L from 'leaflet';
+import { LayersControlProps } from 'react-leaflet'; // Import LayersControlProps
+import { ComponentType, RefAttributes } from 'react'; // For casting dynamic import
+
+// Statically import LayersControl for accessing its static properties BaseLayer and Overlay for type definition
+import { LayersControl as StaticLayersControl } from 'react-leaflet';
+
+
+const MapContainerComp = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false })
+const TileLayerComp = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false })
+
+// Define the type for LayersControl including its static sub-components
+interface CustomLayersControlType extends ComponentType<LayersControlProps & RefAttributes<L.Control.Layers>> {
+  BaseLayer: typeof StaticLayersControl.BaseLayer;
+  Overlay: typeof StaticLayersControl.Overlay;
+}
+const LayersControlComp = dynamic(() => import("react-leaflet").then((mod) => mod.LayersControl), { ssr: false }) as CustomLayersControlType;
+
+const MarkerComp = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false })
+const PopupComp = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false })
+const CircleComp = dynamic(() => import("react-leaflet").then((mod) => mod.Circle), { ssr: false })
+
 
 // Define OpenWeatherMap API key placeholder
 const OPENWEATHERMAP_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY_HERE"; // Replace with your actual API key
@@ -295,39 +312,39 @@ export default function Map() {
         </div>
       )}
 
-      <MapContainer
+      <MapContainerComp
         center={[40.7589, -73.9851]} // NYC coordinates
         zoom={11}
         style={{ height: "100%", width: "100%", zIndex: 1 }}
         className="leaflet-container"
       >
-        <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name="OpenStreetMap">
-            <TileLayer
+        <LayersControlComp position="topright">
+          <LayersControlComp.BaseLayer checked name="OpenStreetMap">
+            <TileLayerComp
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             />
-          </LayersControl.BaseLayer>
+          </LayersControlComp.BaseLayer>
 
           {OPENWEATHERMAP_API_KEY !== "YOUR_OPENWEATHERMAP_API_KEY_HERE" ? (
-            <LayersControl.Overlay name="Weather Radar (Precipitation)">
-              <TileLayer
+            <LayersControlComp.Overlay name="Weather Radar (Precipitation)">
+              <TileLayerComp
                 url={`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OPENWEATHERMAP_API_KEY}`}
                 attribution='&copy; <a href="https://openweathermap.org/">OpenWeatherMap</a>'
                 opacity={0.7}
               />
-            </LayersControl.Overlay>
+            </LayersControlComp.Overlay>
           ) : null}
           {/* Don't render anything if API key is missing for radar, warning is already logged */}
 
           {OPENWEATHERMAP_API_KEY !== "YOUR_OPENWEATHERMAP_API_KEY_HERE" ? (
-            <LayersControl.Overlay name="Wind Patterns">
-              <TileLayer
+            <LayersControlComp.Overlay name="Wind Patterns">
+              <TileLayerComp
                 url={`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OPENWEATHERMAP_API_KEY}`}
                 attribution='&copy; <a href="https://openweathermap.org/">OpenWeatherMap</a>'
                 opacity={0.7}
               />
-            </LayersControl.Overlay>
+            </LayersControlComp.Overlay>
           ) : (
             // UI could also show a message "Wind layer unavailable - API key missing"
             // Warning for missing key is already logged once for radar, no need to repeat.
@@ -344,7 +361,7 @@ export default function Map() {
           markers.map((marker) => {
             console.log("Rendering marker:", marker.name, "at position:", marker.position)
             return (
-              <Marker
+              <MarkerComp
                 key={marker.id}
                 position={marker.position}
                 icon={createStatusIcon(marker.status, marker.type)}
@@ -355,7 +372,7 @@ export default function Map() {
                   },
                 }}
               >
-                <Popup>
+                <PopupComp>
                   <div className="p-3 min-w-[250px]">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-xl">{getTypeIcon(marker.type)}</span>
@@ -414,8 +431,8 @@ export default function Map() {
                       </div>
                     )}
                   </div>
-                </Popup>
-              </Marker>
+                </PopupComp>
+              </MarkerComp>
             )
           })}
 
@@ -423,12 +440,12 @@ export default function Map() {
         {locations &&
           locations.length > 0 &&
           locations.map((location) => (
-            <Marker
+            <MarkerComp
               key={`location-${location.id}`}
               position={[location.lat, location.lng]}
               icon={createStatusIcon(location.status, location.type)}
             >
-              <Popup>
+              <PopupComp>
                 <div className="p-2 min-w-[200px]">
                   <h3 className="font-bold text-lg mb-1">{location.name}</h3>
                   <p className="text-sm text-gray-600 mb-2">{location.location}</p>
@@ -461,20 +478,20 @@ export default function Map() {
                     </div>
                   )}
                 </div>
-              </Popup>
-            </Marker>
+              </PopupComp>
+            </MarkerComp>
           ))}
 
         {/* Render live locations from other users */}
         {liveLocations &&
           liveLocations.length > 0 &&
           liveLocations.map((liveLocation) => (
-            <Marker
+            <MarkerComp
               key={`live-${liveLocation.id}`}
               position={[liveLocation.lat, liveLocation.lng]}
               icon={createStatusIcon("safe", "person")} // Live locations are always people and safe
             >
-              <Popup>
+              <PopupComp>
                 <div className="p-3 min-w-[250px]">
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
@@ -537,17 +554,17 @@ export default function Map() {
                     </div>
                   </div>
                 </div>
-              </Popup>
-            </Marker>
+              </PopupComp>
+            </MarkerComp>
           ))}
 
         {/* Render current user's location if sharing */}
         {isSharing && currentLocation && (
-          <Marker
+          <MarkerComp
             position={[currentLocation.coords.latitude, currentLocation.coords.longitude]}
             icon={createStatusIcon("safe", "person")}
           >
-            <Popup>
+            <PopupComp>
               <div className="p-3 min-w-[250px]">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
@@ -586,15 +603,15 @@ export default function Map() {
                   <p>This is your current location being shared with others.</p>
                 </div>
               </div>
-            </Popup>
-          </Marker>
+            </PopupComp>
+          </MarkerComp>
         )}
 
         {/* Render alert zones from API */}
         {alerts &&
           alerts.length > 0 &&
           alerts.map((alert) => (
-            <Circle
+            <CircleComp
               key={`alert-${alert.id}`}
               center={[alert.coordinates.lat, alert.coordinates.lng]}
               radius={alert.radius * 1000} // Convert km to meters
@@ -603,7 +620,7 @@ export default function Map() {
               fillOpacity={0.2}
               weight={2}
             >
-              <Popup>
+              <PopupComp>
                 <div className="p-2 min-w-[250px]">
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-bold text-lg text-red-600">{alert.title}</h3>
@@ -640,10 +657,10 @@ export default function Map() {
                     </p>
                   </div>
                 </div>
-              </Popup>
-            </Circle>
+              </PopupComp>
+            </CircleComp>
           ))}
-      </MapContainer>
+      </MapContainerComp>
     </div>
   )
 }

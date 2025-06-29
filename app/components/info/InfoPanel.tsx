@@ -57,7 +57,7 @@ export default function InfoPanel() {
   const CACHE_DURATION_MS = 10 * 60 * 1000;
 
   const fallbackWeatherData: WeatherData = {
-    location: { lat: 0, lng: 0, name: "Unknown (Using Fallback Data)" },
+    location: { lat: 0, lng: 0 }, // Removed name property
     current: {
       temperature: 18, condition: "Unavailable", windSpeed: 0, humidity: 50,
       description: "Could not load live weather.", pressure: 1010, visibility: 5, icon: "unknown"
