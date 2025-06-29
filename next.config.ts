@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack: (config) => {
+  webpack: (config: any) => {
     // Handle leaflet images
     config.resolve.alias = {
       ...config.resolve.alias,
