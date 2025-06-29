@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useMapContext } from "../../contexts/MapContext"
+import { fetchWithRetry } from "../../utils/fetchUtils";
 
 interface WeatherData {
   location: { lat: number; lng: number }
@@ -50,6 +51,41 @@ export default function InfoPanel() {
   const [loadingWeather, setLoadingWeather] = useState(false)
   const [loadingAlerts, setLoadingAlerts] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isFallbackData, setIsFallbackData] = useState(false);
+
+  // Cache duration in milliseconds (e.g., 10 minutes)
+  const CACHE_DURATION_MS = 10 * 60 * 1000;
+
+  const fallbackWeatherData: WeatherData = {
+    location: { lat: 0, lng: 0, name: "Unknown (Using Fallback Data)" },
+    current: {
+      temperature: 18, condition: "Unavailable", windSpeed: 0, humidity: 50,
+      description: "Could not load live weather.", pressure: 1010, visibility: 5, icon: "unknown"
+    },
+    alerts: [],
+    forecast: [
+      { time: "N/A", temp: 0, condition: "Unavailable", description: "N/A", icon: "unknown" },
+      { time: "N/A", temp: 0, condition: "Unavailable", description: "N/A", icon: "unknown" },
+      { time: "N/A", temp: 0, condition: "Unavailable", description: "N/A", icon: "unknown" },
+    ]
+  };
+
+  const fallbackAlertsList: Alert[] = [
+    {
+      id: "fallback-alert-system-1",
+      type: "system_status",
+      severity: "medium",
+      title: "Live Alerts Unavailable",
+      description: "Displaying cached or sample alerts. Could not connect to the live alert feed. Please check your connection or try again later.",
+      location: "System-wide",
+      coordinates: { lat: 0, lng: 0 },
+      radius: 0,
+      issued: new Date().toISOString(),
+      expires: new Date(Date.now() + 3600000).toISOString(),
+      source: "System Monitor"
+    }
+  ];
+
 
   useEffect(() => {
     if (selectedMarker) {
@@ -60,42 +96,111 @@ export default function InfoPanel() {
   const fetchWeatherAndAlerts = async () => {
     if (!selectedMarker) return
 
+    setLoadingWeather(true)
+    setLoadingAlerts(true)
+    setError(null)
+    setIsFallbackData(false); // Reset fallback state on new fetch
+
+    const cacheKeyWeather = `weather_${selectedMarker.position[0]}_${selectedMarker.position[1]}`;
+    const cacheKeyAlerts = `alerts_global`; // Using a global key for now, can be location-specific if API supports it
+
     try {
-      setLoadingWeather(true)
-      setLoadingAlerts(true)
-      setError(null)
-
-      // Fetch weather data for selected marker location
-      console.log('Fetching weather for:', selectedMarker.position)
-      const weatherRes = await fetch(`/api/weather?lat=${selectedMarker.position[0]}&lng=${selectedMarker.position[1]}`)
-      const weatherDataRes = await weatherRes.json()
-      
-      if (weatherDataRes.success) {
-        setWeatherData(weatherDataRes.data)
-        console.log('Weather loaded:', weatherDataRes.data)
-      } else {
-        console.error('Failed to fetch weather:', weatherDataRes.error)
+      // Attempt to load weather from cache
+      const cachedWeather = localStorage.getItem(cacheKeyWeather);
+      if (cachedWeather) {
+        const { data, timestamp } = JSON.parse(cachedWeather);
+        if (Date.now() - timestamp < CACHE_DURATION_MS) {
+          setWeatherData(data);
+          console.log('Weather loaded from cache:', data);
+          setLoadingWeather(false);
+        } else {
+          localStorage.removeItem(cacheKeyWeather); // Stale data
+        }
       }
-      setLoadingWeather(false)
 
-      // Fetch alerts data
-      console.log('Fetching alerts...')
-      const alertsRes = await fetch('/api/alerts')
-      const alertsData = await alertsRes.json()
-      
-      if (alertsData.success) {
-        setAlerts(alertsData.data || [])
-        console.log('Alerts loaded:', alertsData.data?.length || 0)
-      } else {
-        console.error('Failed to fetch alerts:', alertsData.error)
+      // Attempt to load alerts from cache
+      const cachedAlerts = localStorage.getItem(cacheKeyAlerts);
+      if (cachedAlerts) {
+        const { data, timestamp } = JSON.parse(cachedAlerts);
+        if (Date.now() - timestamp < CACHE_DURATION_MS) {
+          setAlerts(data || []);
+          console.log('Alerts loaded from cache:', data?.length || 0);
+          setLoadingAlerts(false);
+        } else {
+          localStorage.removeItem(cacheKeyAlerts); // Stale data
+        }
       }
-      setLoadingAlerts(false)
 
-    } catch (error) {
-      console.error('Failed to fetch data:', error)
-      setError('Failed to load weather and alert data')
-      setLoadingWeather(false)
-      setLoadingAlerts(false)
+      // Fetch weather data if not loaded from cache or cache was stale
+      if (loadingWeather) { // Check if still loading (i.e., not set by cache)
+        console.log('Fetching weather for:', selectedMarker.position)
+        try {
+          const weatherRes = await fetchWithRetry(`/api/weather?lat=${selectedMarker.position[0]}&lng=${selectedMarker.position[1]}`);
+          const weatherDataRes = await weatherRes.json();
+
+          if (weatherDataRes.success) {
+            setWeatherData(weatherDataRes.data);
+            localStorage.setItem(cacheKeyWeather, JSON.stringify({ data: weatherDataRes.data, timestamp: Date.now() }));
+            console.log('Weather fetched and cached:', weatherDataRes.data);
+            if (weatherDataRes.fallback) {
+              setError(prev => prev ? `${prev}, Using fallback weather.` : 'Using fallback weather.');
+              setIsFallbackData(true);
+            }
+          } else { // API call was made, but success: false (e.g. API key issue, not a network error for retry)
+            console.error('Failed to fetch weather (API error, not retried):', weatherDataRes.error);
+            setError(prev => prev ? `${prev}, Weather fetch error: ${weatherDataRes.error}` : `Weather fetch error: ${weatherDataRes.error}`);
+            setWeatherData(fallbackWeatherData); // Use component's fallback
+            setIsFallbackData(true);
+          }
+        } catch (networkError) { // fetchWithRetry failed after all retries
+          console.error('Network error fetching weather (after retries):', networkError);
+          setError(prev => prev ? `${prev}, Weather network error. Displaying fallback.` : 'Weather network error. Displaying fallback.');
+          setWeatherData(fallbackWeatherData);
+          setIsFallbackData(true);
+        } finally {
+          setLoadingWeather(false);
+        }
+      }
+
+      // Fetch alerts data if not loaded from cache or cache was stale
+      if (loadingAlerts) { // Check if still loading
+        console.log('Fetching alerts...')
+        try {
+          const alertsRes = await fetchWithRetry('/api/alerts');
+          const alertsData = await alertsRes.json();
+
+          if (alertsData.success) {
+            setAlerts(alertsData.data || []);
+            localStorage.setItem(cacheKeyAlerts, JSON.stringify({ data: alertsData.data || [], timestamp: Date.now() }));
+            console.log('Alerts fetched and cached:', alertsData.data?.length || 0);
+             if (alertsData.fallback) { // If /api/alerts itself returns a fallback flag
+              setError(prev => prev ? `${prev}, Using fallback alerts.` : 'Using fallback alerts.');
+              setIsFallbackData(true);
+            }
+          } else { // API call was made, but success: false
+            console.error('Failed to fetch alerts (API error, not retried):', alertsData.error);
+            setError(prev => prev ? `${prev}, Alerts fetch error: ${alertsData.error}` : `Alerts fetch error: ${alertsData.error}`);
+            setAlerts(fallbackAlertsList); // Use component's fallback
+            setIsFallbackData(true);
+          }
+        } catch (networkError) { // fetchWithRetry failed after all retries
+          console.error('Network error fetching alerts (after retries):', networkError);
+          setError(prev => prev ? `${prev}, Alerts network error. Displaying fallback.` : 'Alerts network error. Displaying fallback.');
+          setAlerts(fallbackAlertsList);
+          setIsFallbackData(true);
+        } finally {
+          setLoadingAlerts(false);
+        }
+      }
+
+    } catch (error) { // This outer catch is for issues with cache logic itself
+      console.error('Error in fetchWeatherAndAlerts (cache logic):', error);
+      setError('A problem occurred loading data. Displaying fallback information.');
+      setWeatherData(fallbackWeatherData);
+      setAlerts(fallbackAlertsList);
+      setIsFallbackData(true);
+      setLoadingWeather(false);
+      setLoadingAlerts(false);
     }
   }
 
@@ -201,6 +306,13 @@ export default function InfoPanel() {
 
   return (
     <div className="h-full bg-white flex flex-col overflow-hidden">
+      {/* Fallback Data Notice */}
+      {isFallbackData && (
+        <div className="p-3 bg-yellow-100 border-b border-yellow-300 text-center text-sm text-yellow-700">
+          ⚠️ Live data is currently unavailable. Displaying cached or default information.
+        </div>
+      )}
+
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center gap-3 mb-2">

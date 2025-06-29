@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { useMapContext } from "../../contexts/MapContext"
-
+import { fetchWithRetry } from "../../utils/fetchUtils";
 import { useLiveLocation } from "../../hooks/useLiveLocation"
 
 import { useAuth } from "@/contexts/AuthContexts"
@@ -15,9 +15,13 @@ import { createStatusIcon } from "../../../lib/leaflet-config"
 
 const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false })
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false })
+const LayersControl = dynamic(() => import("react-leaflet").then((mod) => mod.LayersControl), { ssr: false })
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false })
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false })
 const Circle = dynamic(() => import("react-leaflet").then((mod) => mod.Circle), { ssr: false })
+
+// Define OpenWeatherMap API key placeholder
+const OPENWEATHERMAP_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY_HERE"; // Replace with your actual API key
 
 interface Location {
   id: number
@@ -62,6 +66,9 @@ export default function Map() {
   const [error, setError] = useState<string | null>(null)
   const [isDemo, setIsDemo] = useState(false)
 
+  // Cache duration in milliseconds (e.g., 10 minutes)
+  const CACHE_DURATION_MS = 10 * 60 * 1000;
+
   useEffect(() => {
     setIsClient(true)
   }, [])
@@ -91,36 +98,84 @@ export default function Map() {
       setLoading(true)
       setError(null)
 
-      // Fetch alerts from your API (this should work without auth)
-      console.log("Fetching alerts...")
-      const alertsRes = await fetch("/api/alerts")
-      const alertsData = await alertsRes.json()
+      const cacheKeyAlertsMap = `alerts_map_global`; // Using a global key for now
+      const cacheKeyLocationsMap = `locations_map_global`; // Key for locations in map
 
-      if (alertsData.success) {
-        setAlerts(alertsData.data || [])
-        console.log("Alerts loaded:", alertsData.data?.length || 0)
-      } else {
-        console.error("Failed to fetch alerts:", alertsData.error)
-      }
-
-      // Fetch locations (will return demo data if not authenticated)
-      console.log("Fetching locations...")
-      const locationsRes = await fetch("/api/locations")
-      const locationsData = await locationsRes.json()
-
-      if (locationsData.success) {
-        setLocations(locationsData.data || [])
-        setIsDemo(locationsData.demo || false)
-        console.log("Locations loaded:", locationsData.data?.length || 0)
-        if (locationsData.demo) {
-          console.log("Using demo data - user not authenticated")
+      // Attempt to load alerts from cache for MapContainer
+      const cachedAlertsMap = localStorage.getItem(cacheKeyAlertsMap);
+      let alertsStillNeedFetching = true;
+      if (cachedAlertsMap) {
+        const { data, timestamp } = JSON.parse(cachedAlertsMap);
+        if (Date.now() - timestamp < CACHE_DURATION_MS) {
+          setAlerts(data || []);
+          console.log('Map alerts loaded from cache:', data?.length || 0);
+          alertsStillNeedFetching = false;
+        } else {
+          localStorage.removeItem(cacheKeyAlertsMap); // Stale data
         }
-      } else {
-        console.error("Failed to fetch locations:", locationsData.error)
-        setError("Failed to load location data")
       }
-    } catch (error) {
-      console.error("Failed to fetch data:", error)
+
+      if (alertsStillNeedFetching) {
+        console.log("Fetching alerts for map...")
+        try {
+          const alertsRes = await fetchWithRetry("/api/alerts"); // Potentially add lat/lng/radius
+          const alertsData = await alertsRes.json();
+
+          if (alertsData.success) {
+            setAlerts(alertsData.data || []);
+            localStorage.setItem(cacheKeyAlertsMap, JSON.stringify({ data: alertsData.data || [], timestamp: Date.now() }));
+            console.log("Map alerts fetched and cached:", alertsData.data?.length || 0);
+          } else {
+            console.error("Failed to fetch alerts for map (after retries):", alertsData.error);
+            setError(prev => prev ? `${prev}, Map alerts fetch failed` : 'Map alerts fetch failed');
+          }
+        } catch (networkError) {
+          console.error('Network error fetching alerts for map (after retries):', networkError);
+          setError(prev => prev ? `${prev}, Map alerts network error` : 'Map alerts network error');
+        }
+      }
+
+      // Attempt to load locations from cache for MapContainer
+      const cachedLocationsMap = localStorage.getItem(cacheKeyLocationsMap);
+      let locationsStillNeedFetching = true;
+      if (cachedLocationsMap) {
+        const { data, timestamp, demo } = JSON.parse(cachedLocationsMap);
+        if (Date.now() - timestamp < CACHE_DURATION_MS) {
+          setLocations(data || []);
+          setIsDemo(demo || false);
+          console.log('Map locations loaded from cache:', data?.length || 0, 'Demo:', demo);
+          locationsStillNeedFetching = false;
+        } else {
+          localStorage.removeItem(cacheKeyLocationsMap); // Stale data
+        }
+      }
+
+      if (locationsStillNeedFetching) {
+        console.log("Fetching locations for map...")
+        try {
+          const locationsRes = await fetchWithRetry("/api/locations");
+          const locationsData = await locationsRes.json();
+
+          if (locationsData.success) {
+            setLocations(locationsData.data || []);
+            setIsDemo(locationsData.demo || false);
+            localStorage.setItem(cacheKeyLocationsMap, JSON.stringify({
+              data: locationsData.data || [],
+              demo: locationsData.demo || false,
+              timestamp: Date.now()
+            }));
+            console.log("Map locations fetched and cached:", locationsData.data?.length || 0, "Demo:", locationsData.demo);
+          } else {
+            console.error("Failed to fetch locations for map (after retries):", locationsData.error);
+            setError(prev => prev ? `${prev}, Map locations fetch failed` : 'Map locations fetch failed');
+          }
+        } catch (networkError) {
+          console.error('Network error fetching locations for map (after retries):', networkError);
+          setError(prev => prev ? `${prev}, Map locations network error` : 'Map locations network error');
+        }
+      }
+    } catch (error) { // This outer catch is for issues with cache logic itself, or if fetchWithRetry re-throws an unhandled error
+      console.error("Error in fetchData for map (cache or unhandled network):", error);
       setError("Failed to load map data. Please try again.")
     } finally {
       setLoading(false)
@@ -245,17 +300,43 @@ export default function Map() {
         zoom={11}
         style={{ height: "100%", width: "100%", zIndex: 1 }}
         className="leaflet-container"
-        // zIndexOffset={-1000}
-        // whenCreated={(mapInstance:any) => {
-        //   console.log("Map created:", mapInstance)
-        //   console.log("Map center:", mapInstance.getCenter())
-        //   console.log("Map zoom:", mapInstance.getZoom())
-        // }}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
+        <LayersControl position="topright">
+          <LayersControl.BaseLayer checked name="OpenStreetMap">
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            />
+          </LayersControl.BaseLayer>
+
+          {OPENWEATHERMAP_API_KEY !== "YOUR_OPENWEATHERMAP_API_KEY_HERE" ? (
+            <LayersControl.Overlay name="Weather Radar (Precipitation)">
+              <TileLayer
+                url={`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OPENWEATHERMAP_API_KEY}`}
+                attribution='&copy; <a href="https://openweathermap.org/">OpenWeatherMap</a>'
+                opacity={0.7}
+              />
+            </LayersControl.Overlay>
+          ) : null}
+          {/* Don't render anything if API key is missing for radar, warning is already logged */}
+
+          {OPENWEATHERMAP_API_KEY !== "YOUR_OPENWEATHERMAP_API_KEY_HERE" ? (
+            <LayersControl.Overlay name="Wind Patterns">
+              <TileLayer
+                url={`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OPENWEATHERMAP_API_KEY}`}
+                attribution='&copy; <a href="https://openweathermap.org/">OpenWeatherMap</a>'
+                opacity={0.7}
+              />
+            </LayersControl.Overlay>
+          ) : (
+            // UI could also show a message "Wind layer unavailable - API key missing"
+            // Warning for missing key is already logged once for radar, no need to repeat.
+            // If radar is also missing key, this just won't show up.
+            // If radar has key but this somehow doesn't (which is not possible with current setup),
+            // then a specific warning for wind could be added. For now, this is fine.
+            null
+          )}
+        </LayersControl>
 
         {/* Render contact markers from MapContext with custom icons */}
         {markers &&

@@ -69,6 +69,50 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, data: weatherData });
   } catch (error) {
-    return NextResponse.json({ success: false, error: "Failed to fetch weather data" }, { status: 500 });
+    console.error("Weather API fetch error:", error);
+    // Return mock weather data as fallback
+    const mockWeatherData = {
+      location: {
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        name: "Fallback Location (Weather API Error)"
+      },
+      current: {
+        temperature: 20, // °C
+        condition: "Partly Cloudy",
+        description: "partly cloudy with a chance of showers",
+        windSpeed: 15, // km/h
+        humidity: 60, // %
+        pressure: 1012, // hPa
+        visibility: 10, // km
+        icon: "02d" // Example icon code
+      },
+      alerts: [
+        {
+          id: "fallback-weather-alert-1",
+          type: "weather_api_status",
+          title: "Real-time Weather Unavailable",
+          description: "Currently displaying cached or mock weather data due to an issue fetching live updates. Please try again later.",
+          severity: "low", // Or 'warning' if you have such a severity
+          areas: ["Current Location"],
+          expires: new Date(Date.now() + 3600000).toISOString(), // Expires in 1 hour
+          source: "System"
+        }
+      ],
+      forecast: [
+        { time: "12:00 PM", temp: 22, condition: "Sunny", description: "clear sky", icon: "01d" },
+        { time: "03:00 PM", temp: 23, condition: "Sunny", description: "clear sky", icon: "01d" },
+        { time: "06:00 PM", temp: 21, condition: "Clouds", description: "few clouds", icon: "02d" },
+        { time: "09:00 PM", temp: 18, condition: "Clear", description: "clear sky", icon: "01n" },
+        { time: "12:00 AM", temp: 16, condition: "Clear", description: "clear sky", icon: "01n" },
+        { time: "03:00 AM", temp: 15, condition: "Clear", description: "clear sky", icon: "01n" },
+      ]
+    };
+    return NextResponse.json({
+      success: true, // Still success:true because we are providing fallback data
+      data: mockWeatherData,
+      fallback: true, // Indicate that this is fallback data
+      error: "Failed to fetch live weather data, serving fallback."
+    }, { status: 200 }); // Return 200 as we are successfully providing data (fallback)
   }
 }
