@@ -26,10 +26,10 @@ const MapContainerComp = dynamic(() => import("react-leaflet").then((mod) => mod
 const TileLayerComp = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false })
 
 // Define the type for LayersControl including its static sub-components
-interface CustomLayersControlType extends ComponentType<LayersControlProps & RefAttributes<L.Control.Layers>> {
+type CustomLayersControlType = ComponentType<LayersControlProps & RefAttributes<L.Control.Layers>> & {
   BaseLayer: typeof StaticLayersControl.BaseLayer;
   Overlay: typeof StaticLayersControl.Overlay;
-}
+};
 const LayersControlComp = dynamic(() => import("react-leaflet").then((mod) => mod.LayersControl), { ssr: false }) as CustomLayersControlType;
 
 const MarkerComp = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false })
