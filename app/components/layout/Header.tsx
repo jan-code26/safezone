@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContexts"
 import UserProfile from "../auth/UserProfile"
 import AuthModal from "../auth/AuthModal"
 
 export default function Header() {
   const { user } = useAuth()
+  const router = useRouter()
   const [showAuthModal, setShowAuthModal] = useState(false)
 
   const handleAuthSuccess = () => {
@@ -35,7 +37,10 @@ export default function Header() {
           <div className="flex items-center gap-4">
             <UserProfile onShowAuth={() => setShowAuthModal(true)} />
 
-            <button className="px-6 py-3 rounded-lg bg-red-600 text-white font-bold text-lg hover:bg-red-700 transition-colors flex items-center gap-2">
+            <button 
+              onClick={() => router.push('/emergency')}
+              className="px-6 py-3 rounded-lg bg-red-600 text-white font-bold text-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+            >
               <span className="text-xl">⚠️</span>
               EMERGENCY SOS
             </button>
