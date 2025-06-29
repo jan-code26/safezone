@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { useMapContext } from "../../contexts/MapContext"
+import { useState, useEffect } from "react"
+import { useMapContext, MarkerData } from "../../contexts/MapContext"
+import AddContact from "./AddContact"
 
 interface Contact {
   id: string
@@ -17,8 +18,13 @@ interface Contact {
 
 export default function ContactsList() {
   const { setSelectedMarker, markers } = useMapContext()
-  
-  const [contacts] = useState<Contact[]>([
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [showAddContact, setShowAddContact] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Default contacts (fallback if no backend data)
+  const defaultContacts: Contact[] = [
     { 
       id: "1", 
       name: "Mom", 
@@ -59,7 +65,65 @@ export default function ContactsList() {
       address: "123 Brooklyn Ave, Brooklyn, NY",
       description: "Near storm area, monitoring conditions"
     },
-  ])
+  ]
+
+  // Fetch contacts from backend
+  const fetchContacts = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const response = await fetch('/api/contacts')
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch contacts')
+      }
+      
+      const data = await response.json()
+      
+      // Convert backend contacts to the format expected by the component
+      const backendContacts: Contact[] = data.contacts.map((contact: any) => ({
+        id: contact.id,
+        name: contact.name,
+        relationship: contact.relationship,
+        status: contact.status,
+        location: contact.address, // Use address as location
+        coordinates: [contact.lat, contact.lng] as [number, number],
+        address: contact.address,
+        description: contact.description || ''
+      }))
+      
+      // Combine default contacts with backend contacts
+      setContacts([...defaultContacts, ...backendContacts])
+    } catch (error) {
+      console.error('Error fetching contacts:', error)
+      setError('Failed to load contacts from server')
+      // Use default contacts as fallback
+      setContacts(defaultContacts)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Load contacts on component mount
+  useEffect(() => {
+    fetchContacts()
+  }, [])
+
+  const handleContactAdded = (newContact: MarkerData) => {
+    // Convert MarkerData to Contact format and add to list
+    const contact: Contact = {
+      id: newContact.id,
+      name: newContact.name,
+      relationship: newContact.relationship || '',
+      status: newContact.status,
+      location: newContact.address,
+      coordinates: newContact.position,
+      address: newContact.address,
+      description: newContact.description
+    }
+    
+    setContacts(prev => [contact, ...prev])
+  }
 
   const getStatusColor = (status: Contact["status"]) => {
     switch (status) {
@@ -90,53 +154,74 @@ export default function ContactsList() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <div className="space-y-3 p-4">
-          {contacts.map((contact) => (
-            <div
-              key={contact.id}
-              onClick={() => handleContactClick(contact)}
-              className="flex items-center gap-3 p-3 hover:bg-gray-50 active:bg-gray-100 rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  handleContactClick(contact)
-                }
-              }}
-              aria-label={`View ${contact.name} on map`}
-            >
-              <div className={`w-3 h-3 rounded-full ${getStatusColor(contact.status)} flex-shrink-0`}></div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900 text-sm">{contact.name}</div>
-                <div className="text-xs text-gray-600 truncate">{contact.relationship}</div>
-                <div className="text-xs text-gray-500 truncate">{contact.location}</div>
+    <>
+      <div className="h-full flex flex-col">
+        {isLoading && (
+          <div className="p-4 text-center text-gray-500">
+            Loading contacts...
+          </div>
+        )}
+        
+        {error && (
+          <div className="p-4 text-center text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-3 p-4">
+            {contacts.map((contact) => (
+              <div
+                key={contact.id}
+                onClick={() => handleContactClick(contact)}
+                className="flex items-center gap-3 p-3 hover:bg-gray-50 active:bg-gray-100 rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    handleContactClick(contact)
+                  }
+                }}
+                aria-label={`View ${contact.name} on map`}
+              >
+                <div className={`w-3 h-3 rounded-full ${getStatusColor(contact.status)} flex-shrink-0`}></div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-gray-900 text-sm">{contact.name}</div>
+                  <div className="text-xs text-gray-600 truncate">{contact.relationship}</div>
+                  <div className="text-xs text-gray-500 truncate">{contact.location}</div>
+                </div>
+                <div className="text-xs text-gray-400">
+                  📍
+                </div>
               </div>
-              <div className="text-xs text-gray-400">
-                📍
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t p-4 space-y-3">
+          <h3 className="font-semibold text-gray-900 text-sm mb-3">Quick Actions</h3>
+          <button 
+            className="w-full py-2 px-3 text-left text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onClick={() => setShowAddContact(true)}
+          >
+            <span>➕</span> Add Contact
+          </button>
+          <button 
+            className="w-full py-2 px-3 text-left text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onClick={() => alert("Set Safe Location functionality would be implemented here")}
+          >
+            <span>📍</span> Set Safe Location
+          </button>
         </div>
       </div>
 
-      <div className="border-t p-4 space-y-3">
-        <h3 className="font-semibold text-gray-900 text-sm mb-3">Quick Actions</h3>
-        <button 
-          className="w-full py-2 px-3 text-left text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-          onClick={() => alert("Add Contact functionality would be implemented here")}
-        >
-          <span>➕</span> Add Contact
-        </button>
-        <button 
-          className="w-full py-2 px-3 text-left text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded flex items-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-          onClick={() => alert("Set Safe Location functionality would be implemented here")}
-        >
-          <span>📍</span> Set Safe Location
-        </button>
-      </div>
-    </div>
+      {showAddContact && (
+        <AddContact
+          onClose={() => setShowAddContact(false)}
+          onContactAdded={handleContactAdded}
+        />
+      )}
+    </>
   )
 }

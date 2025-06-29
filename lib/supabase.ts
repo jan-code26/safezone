@@ -41,6 +41,52 @@ export interface Database {
           last_updated?: string;
         };
       };
+      contacts: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          relationship: string;
+          phone?: string;
+          email?: string;
+          address: string;
+          lat: number;
+          lng: number;
+          status: 'safe' | 'caution' | 'danger';
+          description?: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          relationship: string;
+          phone?: string;
+          email?: string;
+          address: string;
+          lat: number;
+          lng: number;
+          status?: 'safe' | 'caution' | 'danger';
+          description?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          relationship?: string;
+          phone?: string;
+          email?: string;
+          address?: string;
+          lat?: number;
+          lng?: number;
+          status?: 'safe' | 'caution' | 'danger';
+          description?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }
