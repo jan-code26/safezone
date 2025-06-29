@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { useMapContext } from "../../contexts/MapContext"
+import { useAuth } from "@/contexts/AuthContexts"
 import "leaflet/dist/leaflet.css"
 
 // Import our custom Leaflet configuration with custom icons
@@ -43,28 +44,38 @@ interface Alert {
 export default function Map() {
   // Get markers and context from MapContext
   const { markers, selectedMarker, setSelectedMarker } = useMapContext()
+  const { user, loading: authLoading } = useAuth()
 
   const [isClient, setIsClient] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
     setIsClient(true)
-    fetchData()
   }, [])
+
+  useEffect(() => {
+    if (isClient && !authLoading) {
+      fetchData()
+    }
+  }, [isClient, authLoading, user])
 
   // Debug logging
   useEffect(() => {
     console.log("MapContainer Debug Info:")
     console.log("- isClient:", isClient)
+    console.log("- authLoading:", authLoading)
+    console.log("- user:", user?.email || "Not authenticated")
     console.log("- markers from context:", markers)
     console.log("- locations from API:", locations)
     console.log("- alerts from API:", alerts)
     console.log("- loading:", loading)
     console.log("- error:", error)
-  }, [isClient, markers, locations, alerts, loading, error])
+    console.log("- isDemo:", isDemo)
+  }, [isClient, authLoading, user, markers, locations, alerts, loading, error, isDemo])
 
   const fetchData = async () => {
     try {
@@ -83,25 +94,25 @@ export default function Map() {
         console.error("Failed to fetch alerts:", alertsData.error)
       }
 
-      // Try to fetch locations (this might fail due to auth)
+      // Fetch locations (will return demo data if not authenticated)
       console.log("Fetching locations...")
-      try {
-        const locationsRes = await fetch("/api/locations")
-        const locationsData = await locationsRes.json()
+      const locationsRes = await fetch("/api/locations")
+      const locationsData = await locationsRes.json()
 
-        if (locationsData.success) {
-          setLocations(locationsData.data || [])
-          console.log("Locations loaded:", locationsData.data?.length || 0)
-        } else {
-          console.warn("Failed to fetch locations (expected if no auth):", locationsData.error)
-          // Don't set this as an error since we have fallback markers
+      if (locationsData.success) {
+        setLocations(locationsData.data || [])
+        setIsDemo(locationsData.demo || false)
+        console.log("Locations loaded:", locationsData.data?.length || 0)
+        if (locationsData.demo) {
+          console.log("Using demo data - user not authenticated")
         }
-      } catch (locError) {
-        console.warn("Location fetch error (expected if no auth):", locError)
+      } else {
+        console.error("Failed to fetch locations:", locationsData.error)
+        setError("Failed to load location data")
       }
     } catch (error) {
       console.error("Failed to fetch data:", error)
-      setError("Failed to load some map data. Using fallback data.")
+      setError("Failed to load map data. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -120,6 +131,8 @@ export default function Map() {
         return "🏢"
       case "emergency":
         return "🚨"
+      case "property":
+        return "🏠"
       default:
         return "📍"
     }
@@ -188,24 +201,47 @@ export default function Map() {
     )
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-100">
         <div className="flex flex-col items-center space-y-2">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <div className="text-gray-600">Loading map data...</div>
+          <div className="text-gray-600">{authLoading ? "Loading authentication..." : "Loading map data..."}</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative z-0">
+      {/* Demo mode banner */}
+      {isDemo && (
+        <div className="absolute top-4 left-4 right-4 z-1000 bg-blue-100 border border-blue-300 rounded-lg p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-blue-600">ℹ️</span>
+              <span className="text-sm font-medium text-blue-800">
+                Demo Mode - Sign in to manage your own locations
+              </span>
+            </div>
+            <button onClick={() => setIsDemo(false)} className="text-blue-600 hover:text-blue-800">
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <MapContainer
         center={[40.7589, -73.9851]} // NYC coordinates
         zoom={11}
-        style={{ height: "100%", width: "100%" }}
+        style={{ height: "100%", width: "100%", zIndex: 1 }}
         className="leaflet-container"
+        // zIndexOffset={-1000}
+        // whenCreated={(mapInstance:any) => {
+        //   console.log("Map created:", mapInstance)
+        //   console.log("Map center:", mapInstance.getCenter())
+        //   console.log("Map zoom:", mapInstance.getZoom())
+        // }}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -328,6 +364,12 @@ export default function Map() {
                       {location.lng.toFixed(4)}
                     </p>
                   </div>
+
+                  {isDemo && (
+                    <div className="mt-2 pt-2 border-t">
+                      <p className="text-xs text-blue-600">Demo location - Sign in to add your own</p>
+                    </div>
+                  )}
                 </div>
               </Popup>
             </Marker>
@@ -386,17 +428,6 @@ export default function Map() {
               </Popup>
             </Circle>
           ))}
-
-        {/* Debug marker to test if markers work at all */}
-        {/* <Marker position={[40.7589, -73.9851]} icon={createStatusIcon("safe", "emergency")}>
-          <Popup>
-            <div className="p-2">
-              <h3 className="font-bold">Debug Marker</h3>
-              <p>This is a test marker at NYC center</p>
-              <p>If you see this, custom markers are working!</p>
-            </div>
-          </Popup>
-        </Marker> */}
       </MapContainer>
     </div>
   )
