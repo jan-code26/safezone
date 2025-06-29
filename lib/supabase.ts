@@ -87,6 +87,71 @@ export interface Database {
           updated_at?: string;
         };
       };
+      live_locations: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          lat: number;
+          lng: number;
+          accuracy?: number;
+          heading?: number;
+          speed?: number;
+          is_sharing: boolean;
+          share_with: string[];
+          last_updated: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          lat: number;
+          lng: number;
+          accuracy?: number;
+          heading?: number;
+          speed?: number;
+          is_sharing?: boolean;
+          share_with?: string[];
+          last_updated?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          lat?: number;
+          lng?: number;
+          accuracy?: number;
+          heading?: number;
+          speed?: number;
+          is_sharing?: boolean;
+          share_with?: string[];
+          last_updated?: string;
+        };
+      };
+      profiles: {
+        Row: {
+          id: string;
+          name: string;
+          avatar_url?: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          name: string;
+          avatar_url?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          avatar_url?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }

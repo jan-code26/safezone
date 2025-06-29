@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { useMapContext } from "../../contexts/MapContext"
+
+import { useLiveLocation } from "../../hooks/useLiveLocation"
+
 import { useAuth } from "@/contexts/AuthContexts"
+
 import "leaflet/dist/leaflet.css"
 
 // Import our custom Leaflet configuration with custom icons
@@ -44,7 +48,12 @@ interface Alert {
 export default function Map() {
   // Get markers and context from MapContext
   const { markers, selectedMarker, setSelectedMarker } = useMapContext()
+  
+  // Get live location data
+  const { liveLocations, currentLocation, isSharing } = useLiveLocation()
+
   const { user, loading: authLoading } = useAuth()
+  
 
   const [isClient, setIsClient] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
@@ -374,6 +383,131 @@ export default function Map() {
               </Popup>
             </Marker>
           ))}
+
+        {/* Render live locations from other users */}
+        {liveLocations &&
+          liveLocations.length > 0 &&
+          liveLocations.map((liveLocation) => (
+            <Marker
+              key={`live-${liveLocation.id}`}
+              position={[liveLocation.lat, liveLocation.lng]}
+              icon={createStatusIcon("safe", "person")} // Live locations are always people and safe
+            >
+              <Popup>
+                <div className="p-3 min-w-[250px]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                    <h3 className="font-bold text-lg text-gray-900">
+                      {liveLocation.user?.name || liveLocation.name}
+                    </h3>
+                    <span className="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                      LIVE
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-sm text-gray-600 mb-3">
+                    <div className="flex justify-between">
+                      <span>Coordinates:</span>
+                      <span className="font-mono">
+                        {liveLocation.lat.toFixed(6)}, {liveLocation.lng.toFixed(6)}
+                      </span>
+                    </div>
+                    {liveLocation.accuracy && (
+                      <div className="flex justify-between">
+                        <span>Accuracy:</span>
+                        <span>±{Math.round(liveLocation.accuracy)}m</span>
+                      </div>
+                    )}
+                    {liveLocation.speed !== null && liveLocation.speed !== undefined && (
+                      <div className="flex justify-between">
+                        <span>Speed:</span>
+                        <span>{Math.round(liveLocation.speed * 3.6)} km/h</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>Last Updated:</span>
+                      <span>{formatTimeAgo(liveLocation.last_updated)}</span>
+                    </div>
+                  </div>
+
+                  {/* Quick actions for live locations */}
+                  <div className="pt-2 border-t">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const url = `https://www.google.com/maps/dir/?api=1&destination=${liveLocation.lat},${liveLocation.lng}`
+                          window.open(url, "_blank")
+                        }}
+                        className="flex-1 py-1 px-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                      >
+                        🗺️ Directions
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // Center map on this location
+                          alert(`Centering on ${liveLocation.user?.name || liveLocation.name}`)
+                        }}
+                        className="flex-1 py-1 px-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                      >
+                        📍 Center
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+        {/* Render current user's location if sharing */}
+        {isSharing && currentLocation && (
+          <Marker
+            position={[currentLocation.coords.latitude, currentLocation.coords.longitude]}
+            icon={createStatusIcon("safe", "person")}
+          >
+            <Popup>
+              <div className="p-3 min-w-[250px]">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                  <h3 className="font-bold text-lg text-gray-900">Your Location</h3>
+                  <span className="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                    SHARING
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-sm text-gray-600 mb-3">
+                  <div className="flex justify-between">
+                    <span>Coordinates:</span>
+                    <span className="font-mono">
+                      {currentLocation.coords.latitude.toFixed(6)}, {currentLocation.coords.longitude.toFixed(6)}
+                    </span>
+                  </div>
+                  {currentLocation.coords.accuracy && (
+                    <div className="flex justify-between">
+                      <span>Accuracy:</span>
+                      <span>±{Math.round(currentLocation.coords.accuracy)}m</span>
+                    </div>
+                  )}
+                  {currentLocation.coords.speed !== null && (
+                    <div className="flex justify-between">
+                      <span>Speed:</span>
+                      <span>{Math.round((currentLocation.coords.speed || 0) * 3.6)} km/h</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Last Updated:</span>
+                    <span>{formatTimeAgo(new Date(currentLocation.timestamp).toISOString())}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t text-xs text-gray-500">
+                  <p>This is your current location being shared with others.</p>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
 
         {/* Render alert zones from API */}
         {alerts &&
