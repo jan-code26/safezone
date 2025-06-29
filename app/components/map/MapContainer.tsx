@@ -206,11 +206,6 @@ export default function Map() {
         zoom={11}
         style={{ height: "100%", width: "100%" }}
         className="leaflet-container"
-        whenCreated={(mapInstance) => {
-          console.log("Map created:", mapInstance)
-          console.log("Map center:", mapInstance.getCenter())
-          console.log("Map zoom:", mapInstance.getZoom())
-        }}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -393,7 +388,7 @@ export default function Map() {
           ))}
 
         {/* Debug marker to test if markers work at all */}
-        <Marker position={[40.7589, -73.9851]} icon={createStatusIcon("safe", "emergency")}>
+        {/* <Marker position={[40.7589, -73.9851]} icon={createStatusIcon("safe", "emergency")}>
           <Popup>
             <div className="p-2">
               <h3 className="font-bold">Debug Marker</h3>
@@ -401,7 +396,7 @@ export default function Map() {
               <p>If you see this, custom markers are working!</p>
             </div>
           </Popup>
-        </Marker>
+        </Marker> */}
       </MapContainer>
     </div>
   )
