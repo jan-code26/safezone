@@ -1,5 +1,19 @@
 import { NextResponse } from 'next/server';
 
+interface Alert {
+  id: number;
+  type: "weather" | "traffic" | "emergency";
+  severity: "low" | "medium" | "high";
+  title: string;
+  description: string;
+  location: string;
+  coordinates: { lat: number; lng: number };
+  radius: number;
+  issued: string;
+  expires: string;
+  source: string;
+}
+// Mock data for alerts
 const mockAlerts = [
   {
     id: 1,
@@ -53,16 +67,23 @@ export async function GET(request: Request) {
     const userLat = parseFloat(lat);
     const userLng = parseFloat(lng);
     
-    const nearbyAlerts = mockAlerts.filter(alert => {
-      const distance = Math.sqrt(
-        Math.pow(alert.coordinates.lat - userLat, 2) + 
-        Math.pow(alert.coordinates.lng - userLng, 2)
-      ) * 111; // Rough km conversion
-      
-      return distance <= radius;
-    });
+  const nearbyAlerts = mockAlerts.filter(alert => {
+    const distance = getHaversineDistance(userLat, userLng, alert.coordinates.lat, alert.coordinates.lng);
+    return distance <= radius;
+  });
 
-    return NextResponse.json({ success: true, data: nearbyAlerts });
+  return NextResponse.json({ success: true, data: nearbyAlerts });
+
+  function getHaversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
   }
 
   return NextResponse.json({ success: true, data: mockAlerts });
