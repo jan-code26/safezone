@@ -1177,3 +1177,35 @@ select.form-control {
     opacity: 0.5;
   }
 }
+
+/* Add these rules at the end of the file */
+
+/* Ensure modals appear above Leaflet maps */
+.modal-overlay {
+  z-index: 9999 !important;
+}
+
+/* Leaflet map container should have lower z-index than modals */
+.leaflet-container {
+  z-index: 1 !important;
+}
+
+/* Leaflet controls should not interfere with modals */
+.leaflet-control-container {
+  z-index: 2 !important;
+}
+
+/* Leaflet popups should be below modals but above map */
+.leaflet-popup-pane {
+  z-index: 3 !important;
+}
+
+/* Ensure map tiles don't interfere */
+.leaflet-tile-pane {
+  z-index: 1 !important;
+}
+
+/* Fix for any other Leaflet elements */
+.leaflet-overlay-pane {
+  z-index: 2 !important;
+}

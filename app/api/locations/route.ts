@@ -1,415 +1,419 @@
-import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase-server';
+import { NextResponse } from "next/server"
+import { createServerClient } from "@/lib/supabase-server"
 
 // Types
 interface CreateLocationDTO {
-  name: string;
-  lat: number;
-  lng: number;
-  type: 'person' | 'property';
-  status?: 'safe' | 'at_risk' | 'unknown';
-  location: string;
+  name: string
+  lat: number
+  lng: number
+  type: "person" | "property"
+  status?: "safe" | "at_risk" | "unknown"
+  location: string
 }
 
 interface UpdateLocationDTO extends Partial<CreateLocationDTO> {
-  id: number;
+  id: number
 }
+
+// Demo data for unauthenticated users
+const demoLocations = [
+  {
+    id: 1,
+    name: "Demo Family Home",
+    lat: 40.7282,
+    lng: -73.7949,
+    type: "property" as const,
+    status: "safe" as const,
+    location: "Queens, NY",
+    created_at: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    user_id: "demo",
+  },
+  {
+    id: 2,
+    name: "Demo Office Location",
+    lat: 40.7589,
+    lng: -73.9851,
+    type: "property" as const,
+    status: "safe" as const,
+    location: "Midtown Manhattan, NY",
+    created_at: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    user_id: "demo",
+  },
+  {
+    id: 3,
+    name: "Demo School",
+    lat: 40.7505,
+    lng: -73.9934,
+    type: "property" as const,
+    status: "at_risk" as const,
+    location: "Upper East Side, NY",
+    created_at: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    user_id: "demo",
+  },
+]
 
 // Validation functions
 const validateCoordinates = (lat: number, lng: number): boolean => {
-  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
-};
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+}
 
-const validateLocationType = (type: string): type is 'person' | 'property' => {
-  return type === 'person' || type === 'property';
-};
+const validateLocationType = (type: string): type is "person" | "property" => {
+  return type === "person" || type === "property"
+}
 
-const validateStatus = (status: string): status is 'safe' | 'at_risk' | 'unknown' => {
-  return status === 'safe' || status === 'at_risk' || status === 'unknown';
-};
+const validateStatus = (status: string): status is "safe" | "at_risk" | "unknown" => {
+  return status === "safe" || status === "at_risk" || status === "unknown"
+}
 
 const validateCreateLocation = (data: any): { valid: boolean; errors: string[] } => {
-  const errors: string[] = [];
+  const errors: string[] = []
 
-  if (!data.name || typeof data.name !== 'string' || data.name.trim().length === 0) {
-    errors.push('Name is required and must be a non-empty string');
+  if (!data.name || typeof data.name !== "string" || data.name.trim().length === 0) {
+    errors.push("Name is required and must be a non-empty string")
   }
 
-  if (typeof data.lat !== 'number' || typeof data.lng !== 'number') {
-    errors.push('Latitude and longitude must be numbers');
+  if (typeof data.lat !== "number" || typeof data.lng !== "number") {
+    errors.push("Latitude and longitude must be numbers")
   } else if (!validateCoordinates(data.lat, data.lng)) {
-    errors.push('Invalid coordinates: lat must be between -90 and 90, lng between -180 and 180');
+    errors.push("Invalid coordinates: lat must be between -90 and 90, lng between -180 and 180")
   }
 
   if (!data.type || !validateLocationType(data.type)) {
-    errors.push('Type must be either "person" or "property"');
+    errors.push('Type must be either "person" or "property"')
   }
 
   if (data.status && !validateStatus(data.status)) {
-    errors.push('Status must be "safe", "at_risk", or "unknown"');
+    errors.push('Status must be "safe", "at_risk", or "unknown"')
   }
 
-  if (!data.location || typeof data.location !== 'string') {
-    errors.push('Location description is required');
+  if (!data.location || typeof data.location !== "string") {
+    errors.push("Location description is required")
   }
 
-  return { valid: errors.length === 0, errors };
-};
+  return { valid: errors.length === 0, errors }
+}
 
-// GET - Retrieve all locations for authenticated user
+// GET - Retrieve all locations for authenticated user or demo data
 export async function GET(request: Request) {
   try {
-    const supabase = await createServerClient();
-    
+    const supabase = await createServerClient()
+
     // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
     if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" }, 
-        { status: 401 }
-      );
+      // Return demo data for unauthenticated users
+      console.log("No authenticated user, returning demo locations")
+      return NextResponse.json({
+        success: true,
+        data: demoLocations,
+        count: demoLocations.length,
+        demo: true,
+        message: "Demo data - Sign in to manage your own locations",
+      })
     }
 
     // Get query parameters for filtering
-    const { searchParams } = new URL(request.url);
-    const typeFilter = searchParams.get('type');
-    const statusFilter = searchParams.get('status');
+    const { searchParams } = new URL(request.url)
+    const typeFilter = searchParams.get("type")
+    const statusFilter = searchParams.get("status")
 
-    // Build query
-    let query = supabase
-      .from('locations')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    // Build query for authenticated users
+    let query = supabase.from("locations").select("*").eq("user_id", user.id).order("created_at", { ascending: false })
 
     if (typeFilter && validateLocationType(typeFilter)) {
-      query = query.eq('type', typeFilter);
+      query = query.eq("type", typeFilter)
     }
 
     if (statusFilter && validateStatus(statusFilter)) {
-      query = query.eq('status', statusFilter);
+      query = query.eq("status", statusFilter)
     }
 
-    const { data: locations, error } = await query;
+    const { data: locations, error } = await query
 
     if (error) {
-      console.error('Database error:', error);
-      return NextResponse.json(
-        { success: false, error: "Failed to retrieve locations" }, 
-        { status: 500 }
-      );
+      console.error("Database error:", error)
+      return NextResponse.json({ success: false, error: "Failed to retrieve locations" }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: locations || [],
-      count: locations?.length || 0 
-    });
+      count: locations?.length || 0,
+      demo: false,
+    })
   } catch (error) {
-    console.error('GET /api/locations error:', error);
-    return NextResponse.json(
-      { success: false, error: "Failed to retrieve locations" }, 
-      { status: 500 }
-    );
+    console.error("GET /api/locations error:", error)
+    return NextResponse.json({ success: false, error: "Failed to retrieve locations" }, { status: 500 })
   }
 }
 
-// POST - Create new location
+// POST - Create new location (requires authentication)
 export async function POST(request: Request) {
   try {
-    const supabase = await createServerClient();
-    
+    const supabase = await createServerClient()
+
     // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" }, 
-        { status: 401 }
-      );
+        { success: false, error: "Authentication required to create locations" },
+        { status: 401 },
+      )
     }
 
-    const body = await request.json();
-    
+    const body = await request.json()
+
     // Validate input
-    const validation = validateCreateLocation(body);
+    const validation = validateCreateLocation(body)
     if (!validation.valid) {
-      return NextResponse.json(
-        { success: false, errors: validation.errors }, 
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, errors: validation.errors }, { status: 400 })
     }
 
     // Insert into database
     const { data: newLocation, error } = await supabase
-      .from('locations')
+      .from("locations")
       .insert({
         user_id: user.id,
         name: body.name.trim(),
         lat: body.lat,
         lng: body.lng,
         type: body.type,
-        status: body.status || 'unknown',
+        status: body.status || "unknown",
         location: body.location.trim(),
       })
       .select()
-      .single();
+      .single()
 
     if (error) {
-      console.error('Database error:', error);
-      return NextResponse.json(
-        { success: false, error: "Failed to create location" }, 
-        { status: 500 }
-      );
+      console.error("Database error:", error)
+      return NextResponse.json({ success: false, error: "Failed to create location" }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      data: newLocation,
-      message: "Location created successfully" 
-    }, { status: 201 });
-  } catch (error) {
-    console.error('POST /api/locations error:', error);
     return NextResponse.json(
-      { success: false, error: "Failed to create location" }, 
-      { status: 500 }
-    );
+      {
+        success: true,
+        data: newLocation,
+        message: "Location created successfully",
+      },
+      { status: 201 },
+    )
+  } catch (error) {
+    console.error("POST /api/locations error:", error)
+    return NextResponse.json({ success: false, error: "Failed to create location" }, { status: 500 })
   }
 }
 
-// PUT - Update existing location
+// PUT - Update existing location (requires authentication)
 export async function PUT(request: Request) {
   try {
-    const supabase = await createServerClient();
-    
+    const supabase = await createServerClient()
+
     // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" }, 
-        { status: 401 }
-      );
+        { success: false, error: "Authentication required to update locations" },
+        { status: 401 },
+      )
     }
 
-    const body: UpdateLocationDTO = await request.json();
-    
-    if (!body.id || typeof body.id !== 'number') {
-      return NextResponse.json(
-        { success: false, error: "Valid location ID is required" }, 
-        { status: 400 }
-      );
+    const body: UpdateLocationDTO = await request.json()
+
+    if (!body.id || typeof body.id !== "number") {
+      return NextResponse.json({ success: false, error: "Valid location ID is required" }, { status: 400 })
     }
 
     // Validate updates
-    const errors: string[] = [];
-    
+    const errors: string[] = []
+
     if (body.lat !== undefined || body.lng !== undefined) {
       if (body.lat !== undefined && body.lng !== undefined) {
         if (!validateCoordinates(body.lat, body.lng)) {
-          errors.push('Invalid coordinates');
+          errors.push("Invalid coordinates")
         }
       } else {
-        errors.push('Both latitude and longitude must be provided together');
+        errors.push("Both latitude and longitude must be provided together")
       }
     }
 
     if (body.type !== undefined && !validateLocationType(body.type)) {
-      errors.push('Invalid location type');
+      errors.push("Invalid location type")
     }
 
     if (body.status !== undefined && !validateStatus(body.status)) {
-      errors.push('Invalid status');
+      errors.push("Invalid status")
     }
 
     if (body.name !== undefined && (!body.name || body.name.trim().length === 0)) {
-      errors.push('Name cannot be empty');
+      errors.push("Name cannot be empty")
     }
 
     if (errors.length > 0) {
-      return NextResponse.json(
-        { success: false, errors }, 
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, errors }, { status: 400 })
     }
 
     // Prepare update data
     const updateData: any = {
       last_updated: new Date().toISOString(),
-    };
+    }
 
-    if (body.name !== undefined) updateData.name = body.name.trim();
-    if (body.lat !== undefined) updateData.lat = body.lat;
-    if (body.lng !== undefined) updateData.lng = body.lng;
-    if (body.type !== undefined) updateData.type = body.type;
-    if (body.status !== undefined) updateData.status = body.status;
-    if (body.location !== undefined) updateData.location = body.location.trim();
+    if (body.name !== undefined) updateData.name = body.name.trim()
+    if (body.lat !== undefined) updateData.lat = body.lat
+    if (body.lng !== undefined) updateData.lng = body.lng
+    if (body.type !== undefined) updateData.type = body.type
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.location !== undefined) updateData.location = body.location.trim()
 
     // Update in database
     const { data: updatedLocation, error } = await supabase
-      .from('locations')
+      .from("locations")
       .update(updateData)
-      .eq('id', body.id)
-      .eq('user_id', user.id) // Ensure user owns this location
+      .eq("id", body.id)
+      .eq("user_id", user.id) // Ensure user owns this location
       .select()
-      .single();
+      .single()
 
     if (error || !updatedLocation) {
-      if (error?.code === 'PGRST116') {
-        return NextResponse.json(
-          { success: false, error: "Location not found" }, 
-          { status: 404 }
-        );
+      if (error?.code === "PGRST116") {
+        return NextResponse.json({ success: false, error: "Location not found" }, { status: 404 })
       }
-      console.error('Database error:', error);
-      return NextResponse.json(
-        { success: false, error: "Failed to update location" }, 
-        { status: 500 }
-      );
+      console.error("Database error:", error)
+      return NextResponse.json({ success: false, error: "Failed to update location" }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: updatedLocation,
-      message: "Location updated successfully" 
-    });
+      message: "Location updated successfully",
+    })
   } catch (error) {
-    console.error('PUT /api/locations error:', error);
-    return NextResponse.json(
-      { success: false, error: "Failed to update location" }, 
-      { status: 500 }
-    );
+    console.error("PUT /api/locations error:", error)
+    return NextResponse.json({ success: false, error: "Failed to update location" }, { status: 500 })
   }
 }
 
-// DELETE - Remove location
+// DELETE - Remove location (requires authentication)
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createServerClient();
-    
+    const supabase = await createServerClient()
+
     // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" }, 
-        { status: 401 }
-      );
+        { success: false, error: "Authentication required to delete locations" },
+        { status: 401 },
+      )
     }
 
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    
-    if (!id || isNaN(parseInt(id))) {
-      return NextResponse.json(
-        { success: false, error: "Valid location ID is required" }, 
-        { status: 400 }
-      );
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get("id")
+
+    if (!id || isNaN(Number.parseInt(id))) {
+      return NextResponse.json({ success: false, error: "Valid location ID is required" }, { status: 400 })
     }
-    
-    const locationId = parseInt(id);
+
+    const locationId = Number.parseInt(id)
 
     // Delete from database
     const { data: deletedLocation, error } = await supabase
-      .from('locations')
+      .from("locations")
       .delete()
-      .eq('id', locationId)
-      .eq('user_id', user.id) // Ensure user owns this location
+      .eq("id", locationId)
+      .eq("user_id", user.id) // Ensure user owns this location
       .select()
-      .single();
+      .single()
 
     if (error || !deletedLocation) {
-      if (error?.code === 'PGRST116') {
-        return NextResponse.json(
-          { success: false, error: "Location not found" }, 
-          { status: 404 }
-        );
+      if (error?.code === "PGRST116") {
+        return NextResponse.json({ success: false, error: "Location not found" }, { status: 404 })
       }
-      console.error('Database error:', error);
-      return NextResponse.json(
-        { success: false, error: "Failed to delete location" }, 
-        { status: 500 }
-      );
+      console.error("Database error:", error)
+      return NextResponse.json({ success: false, error: "Failed to delete location" }, { status: 500 })
     }
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       data: deletedLocation,
-      message: "Location deleted successfully" 
-    });
+      message: "Location deleted successfully",
+    })
   } catch (error) {
-    console.error('DELETE /api/locations error:', error);
-    return NextResponse.json(
-      { success: false, error: "Failed to delete location" }, 
-      { status: 500 }
-    );
+    console.error("DELETE /api/locations error:", error)
+    return NextResponse.json({ success: false, error: "Failed to delete location" }, { status: 500 })
   }
 }
 
-// PATCH - Quick status update
+// PATCH - Quick status update (requires authentication)
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createServerClient();
-    
+    const supabase = await createServerClient()
+
     // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" }, 
-        { status: 401 }
-      );
+        { success: false, error: "Authentication required to update locations" },
+        { status: 401 },
+      )
     }
 
-    const body = await request.json();
-    const { id, status } = body;
+    const body = await request.json()
+    const { id, status } = body
 
-    if (!id || typeof id !== 'number') {
-      return NextResponse.json(
-        { success: false, error: "Valid location ID is required" }, 
-        { status: 400 }
-      );
+    if (!id || typeof id !== "number") {
+      return NextResponse.json({ success: false, error: "Valid location ID is required" }, { status: 400 })
     }
 
     if (!status || !validateStatus(status)) {
-      return NextResponse.json(
-        { success: false, error: "Valid status is required" }, 
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Valid status is required" }, { status: 400 })
     }
 
     // Update status in database
     const { data: updatedLocation, error } = await supabase
-      .from('locations')
-      .update({ 
-        status, 
-        last_updated: new Date().toISOString() 
+      .from("locations")
+      .update({
+        status,
+        last_updated: new Date().toISOString(),
       })
-      .eq('id', id)
-      .eq('user_id', user.id) // Ensure user owns this location
+      .eq("id", id)
+      .eq("user_id", user.id) // Ensure user owns this location
       .select()
-      .single();
+      .single()
 
     if (error || !updatedLocation) {
-      if (error?.code === 'PGRST116') {
-        return NextResponse.json(
-          { success: false, error: "Location not found" }, 
-          { status: 404 }
-        );
+      if (error?.code === "PGRST116") {
+        return NextResponse.json({ success: false, error: "Location not found" }, { status: 404 })
       }
-      console.error('Database error:', error);
-      return NextResponse.json(
-        { success: false, error: "Failed to update status" }, 
-        { status: 500 }
-      );
+      console.error("Database error:", error)
+      return NextResponse.json({ success: false, error: "Failed to update status" }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: updatedLocation,
-      message: "Status updated successfully" 
-    });
+      message: "Status updated successfully",
+    })
   } catch (error) {
-    console.error('PATCH /api/locations error:', error);
-    return NextResponse.json(
-      { success: false, error: "Failed to update status" }, 
-      { status: 500 }
-    );
+    console.error("PATCH /api/locations error:", error)
+    return NextResponse.json({ success: false, error: "Failed to update status" }, { status: 500 })
   }
 }
