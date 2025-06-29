@@ -3,19 +3,16 @@
 
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
+import { useMapContext } from "../../contexts/MapContext"
 import "leaflet/dist/leaflet.css"
 
 // Import our custom Leaflet configuration
 import L from "../../../lib/leaflet-config"
 
 const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), { ssr: false })
-
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false })
-
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false })
-
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false })
-
 const Circle = dynamic(() => import("react-leaflet").then((mod) => mod.Circle), { ssr: false })
 
 interface Location {
@@ -69,6 +66,9 @@ interface WeatherData {
 }
 
 export default function Map() {
+  // Get markers and context from MapContext
+  const { markers, selectedMarker, setSelectedMarker } = useMapContext()
+  
   const [isClient, setIsClient] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -86,9 +86,13 @@ export default function Map() {
       setLoading(true)
       setError(null)
       
+      const headers = {
+        'Content-Type':'application/json',
+        'X-API-Key':process.env.NEXT_PUBLIC_API_KEY || ''
+      }
       // Fetch locations from your API
       console.log('Fetching locations...')
-      const locationsRes = await fetch('/api/locations')
+      const locationsRes = await fetch('/api/locations',{headers})
       const locationsData = await locationsRes.json()
       
       if (locationsData.success) {
@@ -130,6 +134,27 @@ export default function Map() {
     }
   }
 
+  // Contact marker helper functions
+  const getMarkerColor = (status: string) => {
+    switch (status) {
+      case 'safe': return '#10B981' // green
+      case 'caution': return '#F59E0B' // amber  
+      case 'danger': return '#EF4444' // red
+      default: return '#6B7280' // gray
+    }
+  }
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'person': return '👤'
+      case 'school': return '🏫'
+      case 'home': return '🏠'
+      case 'work': return '🏢'
+      case 'emergency': return '🚨'
+      default: return '📍'
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'safe': return '#10B981' // green
@@ -142,6 +167,8 @@ export default function Map() {
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case 'safe': return 'bg-green-100 text-green-800'
+      case 'caution': return 'bg-orange-100 text-orange-800'
+      case 'danger': return 'bg-red-100 text-red-800'
       case 'at_risk': return 'bg-amber-100 text-amber-800'
       case 'unknown': return 'bg-gray-100 text-gray-800'
       default: return 'bg-gray-100 text-gray-800'
@@ -203,7 +230,7 @@ export default function Map() {
         <div className="text-center">
           <div className="text-red-600 mb-2">⚠️ {error}</div>
           <button 
-            onClick={fetchData}
+            onClick={() => fetchData()}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Retry
@@ -215,39 +242,6 @@ export default function Map() {
 
   return (
     <div className="h-full w-full relative">
-      {/* Weather Info Panel */}
-      {weatherData && (
-        <div className="absolute top-4 right-4 z-[1000] bg-white rounded-lg shadow-lg p-4 max-w-sm">
-          <h3 className="font-bold text-lg mb-2">Current Weather</h3>
-          <div className="space-y-1 text-sm">
-            <p><span className="font-semibold">Temperature:</span> {weatherData.current.temperature}°C</p>
-            <p><span className="font-semibold">Condition:</span> {weatherData.current.condition}</p>
-            <p><span className="font-semibold">Wind:</span> {weatherData.current.windSpeed} km/h</p>
-            <p><span className="font-semibold">Humidity:</span> {weatherData.current.humidity}%</p>
-          </div>
-          {weatherData.alerts && weatherData.alerts.length > 0 && (
-            <div className="mt-3 pt-3 border-t">
-              <h4 className="font-semibold text-red-600 mb-1">Weather Alerts:</h4>
-              {weatherData.alerts.map((alert, index) => (
-                <div key={index} className="text-xs text-red-600">
-                  {alert.title}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Stats Panel */}
-      <div className="absolute top-4 left-4 z-[1000] bg-white rounded-lg shadow-lg p-4">
-        <div className="space-y-2 text-sm">
-          <div><span className="font-semibold">Locations:</span> {locations.length}</div>
-          <div><span className="font-semibold">Active Alerts:</span> {alerts.length}</div>
-          <div className="text-xs text-gray-500">
-            Last updated: {formatTimeAgo(new Date().toISOString())}
-          </div>
-        </div>
-      </div>
 
       <MapContainer
         center={[40.7589, -73.9851]} // NYC coordinates
@@ -260,10 +254,85 @@ export default function Map() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
 
+        {/* Render contact markers from MapContext */}
+        {markers.map((marker) => (
+          <Marker 
+            key={marker.id} 
+            position={marker.position}
+            eventHandlers={{
+              click: () => {
+                setSelectedMarker(marker)
+                console.log('Selected contact marker:', marker.name)
+              }
+            }}
+          >
+            <Popup>
+              <div className="p-3 min-w-[250px]">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">{getTypeIcon(marker.type)}</span>
+                  <h3 className="font-bold text-lg text-gray-900">{marker.name}</h3>
+                </div>
+                
+                {marker.relationship && (
+                  <p className="text-sm text-gray-600 mb-2">{marker.relationship}</p>
+                )}
+                
+                <div className="flex items-center justify-between mb-3">
+                  <span 
+                    className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadgeClass(marker.status)}`}
+                  >
+                    {marker.status.toUpperCase()}
+                  </span>
+                  <span className="text-xs text-gray-500 capitalize flex items-center gap-1">
+                    {getTypeIcon(marker.type)} {marker.type}
+                  </span>
+                </div>
+
+                <p className="text-sm text-gray-700 mb-2">{marker.description}</p>
+                <p className="text-xs text-gray-600 mb-3">{marker.address}</p>
+
+                <div className="pt-2 border-t text-xs space-y-1">
+                  <p>
+                    <span className="font-semibold">Coordinates:</span> 
+                    <span className="ml-1">{marker.position[0].toFixed(4)}, {marker.position[1].toFixed(4)}</span>
+                  </p>
+                </div>
+
+                {/* Quick actions in popup */}
+                {marker.type === 'person' && (
+                  <div className="mt-3 pt-2 border-t">
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          alert(`Calling ${marker.name}...`)
+                        }}
+                        className="flex-1 py-1 px-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                      >
+                        📞 Call
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const url = `https://www.google.com/maps/dir/?api=1&destination=${marker.position[0]},${marker.position[1]}`
+                          window.open(url, '_blank')
+                        }}
+                        className="flex-1 py-1 px-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                      >
+                        🗺️ Directions
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+
         {/* Render locations from API */}
         {locations.map((location) => (
           <Marker 
-            key={location.id} 
+            key={`location-${location.id}`} 
             position={[location.lat, location.lng]}
           >
             <Popup>
@@ -299,7 +368,7 @@ export default function Map() {
         {/* Render alert zones from API */}
         {alerts.map((alert) => (
           <Circle
-            key={alert.id}
+            key={`alert-${alert.id}`}
             center={[alert.coordinates.lat, alert.coordinates.lng]}
             radius={alert.radius * 1000} // Convert km to meters
             color={getAlertColor(alert.severity)}
